@@ -2,8 +2,16 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Saku Poin - SD Negeri 17 Dauh Puri</title>
+    
+    <!-- PWA Meta Tags (WAJIB DITAMBAHKAN) -->
+    <meta name="theme-color" content="#2563eb">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Saku Poin">
     
     <!-- Tailwind CSS (Untuk Desain) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -25,6 +33,12 @@
         .print\:hidden { display: none !important; }
         .print\:block { display: block !important; }
       }
+      /* Animasi Loading */
+      .loader {
+        border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%;
+        width: 40px; height: 40px; animation: spin 1s linear infinite;
+      }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
@@ -36,38 +50,12 @@
     <script type="text/babel">
         const { useState, useMemo, useEffect } = React;
 
-        // --- MOCK DATA (Simulasi Data Google Sheet) ---
-        const schoolData = {
-          namaSekolah: "SD Negeri 17 Dauh Puri",
-          kepalaSekolah: "I Wayan Sudana, S.Pd., M.Pd.",
-          nipKepalaSekolah: "19750412 199903 1 008",
-          lokasi: "Denpasar"
-        };
+        // =========================================================================
+        // PENTING: Ganti URL di bawah ini dengan URL Web App Google Apps Script Anda
+        // =========================================================================
+        const SCRIPT_URL = "ISI_DENGAN_URL_WEB_APP_GOOGLE_SCRIPT_ANDA";
 
-        const teachersData = [
-          { id: 'T1', nama: "Ni Made Ayu, S.Pd.", nip: "19800101 200501 2 001", waliKelas: "1A" },
-          { id: 'T2', nama: "I Ketut Budi, S.Pd.", nip: "19820202 200602 1 002", waliKelas: "2B" },
-          { id: 'T3', nama: "Putu Eka, S.Pd.", nip: "19850303 201003 2 003", waliKelas: "6A" },
-          { id: 'T4', nama: "Dewa Gede, S.Pd.", nip: "19900404 201504 1 004", waliKelas: null },
-        ];
-
-        const studentsData = [
-          { id: 'S1', nama: "Agus Pratama", kelas: "1A", noAbsen: "1" },
-          { id: 'S2', nama: "Budi Santoso", kelas: "1A", noAbsen: "2" },
-          { id: 'S3', nama: "Cita Lestari", kelas: "2B", noAbsen: "1" },
-          { id: 'S4', nama: "Dina Mariana", kelas: "2B", noAbsen: "2" },
-          { id: 'S5', nama: "Eka Putra", kelas: "6A", noAbsen: "5" },
-        ];
-
-        const violationsData = [
-          { id: 'V1', jenis: "Terlambat datang", poin: 5 },
-          { id: 'V2', jenis: "Tidak membuang sampah pada tempatnya", poin: 10 },
-          { id: 'V3', jenis: "Baju tidak dimasukkan / tidak rapi", poin: 5 },
-          { id: 'V4', jenis: "Berkelahi dengan teman", poin: 30 },
-          { id: 'V5', jenis: "Membawa HP ke sekolah", poin: 20 },
-          { id: 'V6', jenis: "Membolos", poin: 40 },
-        ];
-
+        // Konfigurasi Visual (Tetap di sini agar mudah dikelola desainnya)
         const visualData = {
           hijau: { max: 20, label: "Aman", color: "bg-green-100 text-green-800 border-green-400", icon: "fa-solid fa-circle-check" },
           kuning: { max: 50, label: "Perlu Perhatian", color: "bg-yellow-100 text-yellow-800 border-yellow-400", icon: "fa-solid fa-triangle-exclamation" },
@@ -77,8 +65,20 @@
         // --- KOMPONEN UTAMA ---
         function App() {
           const [activeTab, setActiveTab] = useState('input');
-          const [records, setRecords] = useState([]);
+          const [isLoading, setIsLoading] = useState(true);
+          const [isSaving, setIsSaving] = useState(false);
+          const [fetchError, setFetchError] = useState(false);
 
+          // State untuk menampung data dari Google Sheet
+          const [appData, setAppData] = useState({
+            schoolData: { namaSekolah: "Memuat Data...", kepalaSekolah: "", nipKepalaSekolah: "", lokasi: "" },
+            teachersData: [],
+            studentsData: [],
+            violationsData: [],
+            records: []
+          });
+
+          // State Form
           const [searchMethod, setSearchMethod] = useState('name');
           const [searchQuery, setSearchQuery] = useState('');
           const [selectedClass, setSelectedClass] = useState('');
@@ -90,12 +90,33 @@
 
           const [modalConfig, setModalConfig] = useState({ isOpen: false, type: '', title: '', message: '' });
 
-          const classes = useMemo(() => [...new Set(studentsData.map(s => s.kelas))].sort(), []);
+          // Mengambil Data dari Google Sheet saat aplikasi pertama kali dibuka
+          useEffect(() => {
+            if (SCRIPT_URL === "ISI_DENGAN_URL_WEB_APP_GOOGLE_SCRIPT_ANDA") {
+              setFetchError(true);
+              setIsLoading(false);
+              return;
+            }
+
+            fetch(SCRIPT_URL)
+              .then(res => res.json())
+              .then(data => {
+                setAppData(data);
+                setIsLoading(false);
+              })
+              .catch(err => {
+                console.error("Gagal memuat data dari Google Sheet:", err);
+                setFetchError(true);
+                setIsLoading(false);
+              });
+          }, []);
+
+          const classes = useMemo(() => [...new Set(appData.studentsData.map(s => s.kelas))].sort(), [appData.studentsData]);
           
           const filteredStudents = useMemo(() => {
             if (searchQuery.length < 2) return [];
-            return studentsData.filter(s => s.nama.toLowerCase().includes(searchQuery.toLowerCase()));
-          }, [searchQuery]);
+            return appData.studentsData.filter(s => s.nama.toLowerCase().includes(searchQuery.toLowerCase()));
+          }, [searchQuery, appData.studentsData]);
 
           const handleSelectStudent = (student) => {
             setSelectedStudent(student);
@@ -104,42 +125,61 @@
 
           useEffect(() => {
             if (searchMethod === 'class' && selectedClass && selectedAbsen) {
-              const student = studentsData.find(s => s.kelas === selectedClass && s.noAbsen === selectedAbsen);
+              const student = appData.studentsData.find(s => s.kelas === selectedClass && s.noAbsen.toString() === selectedAbsen.toString());
               setSelectedStudent(student || null);
             }
-          }, [selectedClass, selectedAbsen, searchMethod]);
+          }, [selectedClass, selectedAbsen, searchMethod, appData.studentsData]);
 
-          const handleSave = () => {
+          // Handle Kirim Data ke Google Sheet
+          const handleSave = async () => {
             if (!selectedStudent || !selectedViolation || !selectedTeacher) {
-              setModalConfig({
-                isOpen: true,
-                type: 'error',
-                title: 'Data Belum Lengkap',
-                message: 'Mohon pilih Siswa, Jenis Pelanggaran, dan Guru Pencatat terlebih dahulu.'
-              });
+              setModalConfig({ isOpen: true, type: 'error', title: 'Data Belum Lengkap', message: 'Mohon pilih Siswa, Jenis Pelanggaran, dan Guru Pencatat terlebih dahulu.' });
               return;
             }
 
-            const violationDetail = violationsData.find(v => v.id === selectedViolation);
-            const teacherDetail = teachersData.find(t => t.id === selectedTeacher);
+            setIsSaving(true);
+
+            const violationDetail = appData.violationsData.find(v => v.id.toString() === selectedViolation.toString());
+            const teacherDetail = appData.teachersData.find(t => t.id.toString() === selectedTeacher.toString());
 
             const newRecord = {
               id: Date.now().toString(),
               tanggal: new Date().toISOString(),
               studentId: selectedStudent.id,
               violation: violationDetail.jenis,
-              poin: violationDetail.poin,
+              poin: parseInt(violationDetail.poin),
               teacher: teacherDetail.nama
             };
 
-            setRecords([newRecord, ...records]);
-            
-            setModalConfig({
-              isOpen: true,
-              type: 'success',
-              title: 'Berhasil Disimpan!',
-              message: `Data pelanggaran untuk ${selectedStudent.nama} telah berhasil dicatat.`
-            });
+            try {
+              // Mengirim data ke Google Script
+              const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: "addRecord", data: newRecord })
+              });
+              
+              const result = await response.json();
+              
+              if (result.status === 'success') {
+                // Update tampilan lokal agar tidak perlu refresh web
+                setAppData(prev => ({ ...prev, records: [...prev.records, newRecord] }));
+                
+                setModalConfig({
+                  isOpen: true,
+                  type: 'success',
+                  title: 'Berhasil Disimpan!',
+                  message: `Data pelanggaran untuk ${selectedStudent.nama} telah berhasil dicatat ke Google Sheet.`
+                });
+              } else {
+                throw new Error("Gagal menyimpan di server");
+              }
+            } catch (error) {
+              console.error("Error saving record:", error);
+              setModalConfig({ isOpen: true, type: 'error', title: 'Gagal Menyimpan', message: 'Terjadi kesalahan saat menyimpan ke Google Sheet. Periksa koneksi internet Anda.' });
+            } finally {
+              setIsSaving(false);
+            }
           };
 
           const handleCloseModal = () => {
@@ -156,8 +196,8 @@
             }
           };
 
-          const studentRecords = records.filter(r => r.studentId === selectedStudent?.id);
-          const totalPoin = studentRecords.reduce((sum, r) => sum + r.poin, 0);
+          const studentRecords = appData.records.filter(r => r.studentId.toString() === selectedStudent?.id.toString());
+          const totalPoin = studentRecords.reduce((sum, r) => sum + parseInt(r.poin || 0), 0);
 
           const getStatus = (poin) => {
             if (poin <= visualData.hijau.max) return visualData.hijau;
@@ -169,14 +209,11 @@
 
           const downloadCSV = () => {
             if (!selectedStudent) return;
-            
             let csvContent = "Tanggal,Pelanggaran,Poin,Pencatat\n";
-            
             studentRecords.forEach(row => {
               const date = new Date(row.tanggal).toLocaleDateString('id-ID');
               csvContent += `${date},${row.violation},${row.poin},${row.teacher}\n`;
             });
-            
             csvContent += `\nTotal Poin,,,${totalPoin}`;
 
             try {
@@ -189,18 +226,38 @@
               link.click();
               document.body.removeChild(link);
             } catch (error) {
-              setModalConfig({
-                isOpen: true,
-                type: 'error',
-                title: 'Error Pengunduhan',
-                message: 'Gagal mengunduh file.'
-              });
+              setModalConfig({ isOpen: true, type: 'error', title: 'Error Pengunduhan', message: 'Gagal mengunduh file.' });
             }
           };
 
           const handlePrint = () => {
             window.print();
           };
+
+          // --- TAMPILAN LOADING ---
+          if (isLoading) {
+            return (
+              <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+                <div className="loader mb-6"></div>
+                <h2 className="text-xl font-bold text-gray-800 mb-2">Sinkronisasi Google Sheet</h2>
+                <p className="text-gray-500 text-sm">Sedang memuat data Sekolah, Guru, dan Siswa...</p>
+              </div>
+            );
+          }
+
+          if (fetchError) {
+            return (
+              <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+                <div className="bg-red-100 p-4 rounded-full text-red-600 mb-6">
+                  <i className="fa-solid fa-link-slash text-4xl"></i>
+                </div>
+                <h2 className="text-xl font-bold text-gray-800 mb-2">Koneksi Database Terputus</h2>
+                <p className="text-gray-500 text-sm max-w-md">
+                  Harap pastikan Anda telah memasukkan <b>URL Web App Google Script</b> pada variabel <code className="bg-gray-200 px-1 rounded">SCRIPT_URL</code> di dalam file HTML aplikasi ini.
+                </p>
+              </div>
+            );
+          }
 
           const renderStudentSelector = () => (
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 relative z-10">
@@ -275,7 +332,7 @@
                       disabled={!selectedClass}
                     >
                       <option value="">Pilih Absen</option>
-                      {studentsData.filter(s => s.kelas === selectedClass).sort((a,b) => parseInt(a.noAbsen) - parseInt(b.noAbsen)).map(s => (
+                      {appData.studentsData.filter(s => s.kelas === selectedClass).sort((a,b) => parseInt(a.noAbsen) - parseInt(b.noAbsen)).map(s => (
                         <option key={s.id} value={s.noAbsen}>{s.noAbsen} - {s.nama}</option>
                       ))}
                     </select>
@@ -339,7 +396,7 @@
                     </div>
                     <div>
                       <h1 className="text-xl font-bold text-gray-900 leading-tight">Saku Poin</h1>
-                      <p className="text-xs text-gray-500 font-medium">{schoolData.namaSekolah}</p>
+                      <p className="text-xs text-gray-500 font-medium">{appData.schoolData.namaSekolah}</p>
                     </div>
                   </div>
                   
@@ -368,7 +425,7 @@
                         <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Pelanggaran</label>
                         <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={selectedViolation} onChange={(e) => setSelectedViolation(e.target.value)}>
                           <option value="">-- Pilih Pelanggaran --</option>
-                          {violationsData.map(v => <option key={v.id} value={v.id}>{v.jenis} (Poin: {v.poin})</option>)}
+                          {appData.violationsData.map(v => <option key={v.id} value={v.id}>{v.jenis} (Poin: {v.poin})</option>)}
                         </select>
                       </div>
 
@@ -376,12 +433,20 @@
                         <label className="block text-sm font-medium text-gray-700 mb-1">Guru Pencatat</label>
                         <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)}>
                           <option value="">-- Pilih Guru --</option>
-                          {teachersData.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
+                          {appData.teachersData.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                         </select>
                       </div>
 
-                      <button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm mt-6">
-                        <i className="fa-solid fa-floppy-disk mr-2"></i> Simpan Pelanggaran
+                      <button 
+                        onClick={handleSave} 
+                        disabled={isSaving}
+                        className={`w-full text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm mt-6 ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                      >
+                        {isSaving ? (
+                          <><div className="loader !w-5 !h-5 !border-2 !border-white !border-t-transparent mr-2"></div> Menyimpan...</>
+                        ) : (
+                          <><i className="fa-solid fa-floppy-disk mr-2"></i> Simpan Pelanggaran</>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -479,7 +544,7 @@
                 <div className="hidden print:block text-black bg-white p-8">
                   <div className="text-center border-b-2 border-black pb-4 mb-6">
                     <h1 className="text-xl font-bold uppercase">Rekapan Saku Poin Siswa</h1>
-                    <h2 className="text-2xl font-bold uppercase">{schoolData.namaSekolah}</h2>
+                    <h2 className="text-2xl font-bold uppercase">{appData.schoolData.namaSekolah}</h2>
                     <p className="text-sm mt-1">Laporan Resmi Poin Pelanggaran Kedisiplinan Siswa</p>
                   </div>
 
@@ -522,14 +587,14 @@
                   <div className="flex justify-between mt-12 text-sm pt-8">
                     <div className="text-center w-64">
                       <p className="mb-20">Mengetahui,<br/>Kepala Sekolah</p>
-                      <p className="font-bold underline">{schoolData.kepalaSekolah}</p>
-                      <p>NIP. {schoolData.nipKepalaSekolah}</p>
+                      <p className="font-bold underline">{appData.schoolData.kepalaSekolah}</p>
+                      <p>NIP. {appData.schoolData.nipKepalaSekolah}</p>
                     </div>
                     <div className="text-center w-64">
-                      <p>{schoolData.lokasi}, {new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p>
+                      <p>{appData.schoolData.lokasi}, {new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p>
                       <p className="mb-16">Wali Kelas {selectedStudent.kelas}</p>
                       {(() => {
-                        const waliKelas = teachersData.find(t => t.waliKelas === selectedStudent.kelas);
+                        const waliKelas = appData.teachersData.find(t => t.waliKelas === selectedStudent.kelas);
                         return waliKelas ? (
                           <>
                             <p className="font-bold underline">{waliKelas.nama}</p>
@@ -567,6 +632,17 @@
         // Render Aplikasi ke Browser
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+    </script>
+
+    <!-- Registrasi Service Worker untuk PWA (WAJIB DITAMBAHKAN SEBELUM BODY TERTUTUP) -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('Service Worker berhasil didaftarkan'))
+            .catch(err => console.log('Service Worker gagal didaftarkan:', err));
+        });
+      }
     </script>
 </body>
 </html>
