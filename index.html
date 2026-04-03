@@ -494,7 +494,24 @@
                         <h1 className="text-xl font-bold uppercase">PENANGANAN PELANGGARAN SISWA</h1>
                         <h2 className="text-2xl font-bold uppercase">{masterData.school.namaSekolah}</h2>
                       </div>
-                      <div className="mb-6"><p className="text-sm">Telah diberikan tindakan kepada siswa:</p><table className="text-sm ml-4 mb-2"><tbody><tr><td className="w-32 font-semibold">Nama</td><td>: {selectedStudent.nama}</td></tr><tr><td className="font-semibold">Kelas</td><td>: {selectedStudent.kelas}</td></tr></tbody></table></div>
+                      
+                      {/* --- UPDATE: Perbaikan Identitas Siswa pada Surat Tindakan --- */}
+                      <div className="mb-6">
+                        <p className="text-sm">Telah diberikan tindakan kepada siswa:</p>
+                        <table className="text-sm ml-4 mb-2">
+                          <tbody>
+                            <tr>
+                              <td className="w-32 font-semibold">Nama</td>
+                              <td>: {selectedStudent.nama}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-semibold">Kelas / Absen</td>
+                              <td>: {selectedStudent.kelas} / {selectedStudent.noAbsen}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      
                       <table className="w-full text-sm border-collapse border border-gray-800 mb-8"><thead><tr className="bg-gray-200"><th className="border border-gray-800 p-2">No</th><th className="border border-gray-800 p-2">Tanggal</th><th className="border border-gray-800 p-2">Rincian Tindakan</th><th className="border border-gray-800 p-2">Keterangan</th></tr></thead><tbody>{studentActions.length > 0 ? studentActions.map((a, i) => (<tr key={a.id}><td className="border border-gray-800 p-2 text-center">{i + 1}</td><td className="border border-gray-800 p-2">{new Date(a.tanggal).toLocaleDateString('id-ID')}</td><td className="border border-gray-800 p-2">{a.rincian}</td><td className="border border-gray-800 p-2 text-center">{a.keterangan}</td></tr>)) : <tr><td colSpan="4" className="border border-gray-800 p-4 text-center">Nihil.</td></tr>}</tbody></table>
                       
                       <div className="mt-8 text-sm w-full">
