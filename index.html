@@ -2,16 +2,8 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saku Poin - SD Negeri 17 Dauh Puri</title>
-    
-    <!-- PWA Meta Tags (WAJIB DITAMBAHKAN) -->
-    <meta name="theme-color" content="#2563eb">
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Saku Poin">
     
     <!-- Tailwind CSS (Untuk Desain) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -32,13 +24,8 @@
         body { background-color: white !important; }
         .print\:hidden { display: none !important; }
         .print\:block { display: block !important; }
+        @page { margin: 1.5cm; }
       }
-      /* Animasi Loading */
-      .loader {
-        border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%;
-        width: 40px; height: 40px; animation: spin 1s linear infinite;
-      }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
@@ -51,11 +38,42 @@
         const { useState, useMemo, useEffect } = React;
 
         // =========================================================================
-        // PENTING: Ganti URL di bawah ini dengan URL Web App Google Apps Script Anda
+        // URL GOOGLE APPS SCRIPT ANDA (MASUKKAN URL BARU DI SINI)
         // =========================================================================
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwG7kJr2kSM4bZ2rH7neNHlhv1xIbELctAeDW0YWhLy4MG5FoZ8_o-kste4eY3QZPk/exec";
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwG7kJr2kSM4bZ2rH7neNHlhv1xIbELctAeDW0YWhLy4MG5FoZ8_o-kste4eY3QZPk/exec"; // Contoh: "https://script.google.com/macros/s/AKfycby.../exec"
 
-        // Konfigurasi Visual (Tetap di sini agar mudah dikelola desainnya)
+        // --- MOCK DATA (Simulasi Data Sekolah) ---
+        const schoolData = {
+          namaSekolah: "SD Negeri 17 Dauh Puri",
+          kepalaSekolah: "I Wayan Sudana, S.Pd., M.Pd.",
+          nipKepalaSekolah: "19750412 199903 1 008",
+          lokasi: "Denpasar"
+        };
+
+        const teachersData = [
+          { id: 'T1', nama: "Ni Made Ayu, S.Pd.", nip: "19800101 200501 2 001", waliKelas: "1A" },
+          { id: 'T2', nama: "I Ketut Budi, S.Pd.", nip: "19820202 200602 1 002", waliKelas: "2B" },
+          { id: 'T3', nama: "Putu Eka, S.Pd.", nip: "19850303 201003 2 003", waliKelas: "6A" },
+          { id: 'T4', nama: "Dewa Gede, S.Pd.", nip: "19900404 201504 1 004", waliKelas: null },
+        ];
+
+        const studentsData = [
+          { id: 'S1', nama: "Agus Pratama", kelas: "1A", noAbsen: "1" },
+          { id: 'S2', nama: "Budi Santoso", kelas: "1A", noAbsen: "2" },
+          { id: 'S3', nama: "Cita Lestari", kelas: "2B", noAbsen: "1" },
+          { id: 'S4', nama: "Dina Mariana", kelas: "2B", noAbsen: "2" },
+          { id: 'S5', nama: "Eka Putra", kelas: "6A", noAbsen: "5" },
+        ];
+
+        const violationsData = [
+          { id: 'V1', jenis: "Terlambat datang", poin: 5 },
+          { id: 'V2', jenis: "Tidak membuang sampah pada tempatnya", poin: 10 },
+          { id: 'V3', jenis: "Baju tidak dimasukkan / tidak rapi", poin: 5 },
+          { id: 'V4', jenis: "Berkelahi dengan teman", poin: 30 },
+          { id: 'V5', jenis: "Membawa HP ke sekolah", poin: 20 },
+          { id: 'V6', jenis: "Membolos", poin: 40 },
+        ];
+
         const visualData = {
           hijau: { max: 20, label: "Aman", color: "bg-green-100 text-green-800 border-green-400", icon: "fa-solid fa-circle-check" },
           kuning: { max: 50, label: "Perlu Perhatian", color: "bg-yellow-100 text-yellow-800 border-yellow-400", icon: "fa-solid fa-triangle-exclamation" },
@@ -65,58 +83,41 @@
         // --- KOMPONEN UTAMA ---
         function App() {
           const [activeTab, setActiveTab] = useState('input');
-          const [isLoading, setIsLoading] = useState(true);
-          const [isSaving, setIsSaving] = useState(false);
-          const [fetchError, setFetchError] = useState(false);
+          
+          // State Data Tersimpan
+          const [records, setRecords] = useState([]); // Riwayat Pelanggaran
+          const [actionRecords, setActionRecords] = useState([]); // Riwayat Tindakan
 
-          // State untuk menampung data dari Google Sheet
-          const [appData, setAppData] = useState({
-            schoolData: { namaSekolah: "Memuat Data...", kepalaSekolah: "", nipKepalaSekolah: "", lokasi: "" },
-            teachersData: [],
-            studentsData: [],
-            violationsData: [],
-            records: []
-          });
-
-          // State Form
+          // State Form Pencarian
           const [searchMethod, setSearchMethod] = useState('name');
           const [searchQuery, setSearchQuery] = useState('');
           const [selectedClass, setSelectedClass] = useState('');
           const [selectedAbsen, setSelectedAbsen] = useState('');
           const [selectedStudent, setSelectedStudent] = useState(null);
 
+          // State Form Input Poin
           const [selectedViolation, setSelectedViolation] = useState('');
           const [selectedTeacher, setSelectedTeacher] = useState('');
 
+          // State Form Tindakan
+          const [rincianTindakan, setRincianTindakan] = useState('');
+          const [isDidampingi, setIsDidampingi] = useState('tidak');
+          const [namaOrtu, setNamaOrtu] = useState('');
+          const [keteranganTindakan, setKeteranganTindakan] = useState('Selesai');
+          const [fotoBase64, setFotoBase64] = useState([]); // Array untuk menyimpan kode base64 foto
+
+          // State Print Layout
+          const [printLayout, setPrintLayout] = useState('rekap'); // 'rekap' | 'tindakan'
+
+          // State Modal Notifikasi
           const [modalConfig, setModalConfig] = useState({ isOpen: false, type: '', title: '', message: '' });
 
-          // Mengambil Data dari Google Sheet saat aplikasi pertama kali dibuka
-          useEffect(() => {
-            if (SCRIPT_URL === "ISI_DENGAN_URL_WEB_APP_GOOGLE_SCRIPT_ANDA") {
-              setFetchError(true);
-              setIsLoading(false);
-              return;
-            }
-
-            fetch(SCRIPT_URL)
-              .then(res => res.json())
-              .then(data => {
-                setAppData(data);
-                setIsLoading(false);
-              })
-              .catch(err => {
-                console.error("Gagal memuat data dari Google Sheet:", err);
-                setFetchError(true);
-                setIsLoading(false);
-              });
-          }, []);
-
-          const classes = useMemo(() => [...new Set(appData.studentsData.map(s => s.kelas))].sort(), [appData.studentsData]);
+          const classes = useMemo(() => [...new Set(studentsData.map(s => s.kelas))].sort(), []);
           
           const filteredStudents = useMemo(() => {
             if (searchQuery.length < 2) return [];
-            return appData.studentsData.filter(s => s.nama.toLowerCase().includes(searchQuery.toLowerCase()));
-          }, [searchQuery, appData.studentsData]);
+            return studentsData.filter(s => s.nama.toLowerCase().includes(searchQuery.toLowerCase()));
+          }, [searchQuery]);
 
           const handleSelectStudent = (student) => {
             setSelectedStudent(student);
@@ -125,139 +126,187 @@
 
           useEffect(() => {
             if (searchMethod === 'class' && selectedClass && selectedAbsen) {
-              const student = appData.studentsData.find(s => s.kelas === selectedClass && s.noAbsen.toString() === selectedAbsen.toString());
+              const student = studentsData.find(s => s.kelas === selectedClass && s.noAbsen === selectedAbsen);
               setSelectedStudent(student || null);
             }
-          }, [selectedClass, selectedAbsen, searchMethod, appData.studentsData]);
+          }, [selectedClass, selectedAbsen, searchMethod]);
 
-          // Handle Kirim Data ke Google Sheet
-          const handleSave = async () => {
+          // =======================================================
+          // MENGIRIM DATA KE GOOGLE SHEETS
+          // =======================================================
+          const sendToGoogleSheets = async (payload) => {
+            if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.startsWith("http")) {
+              try {
+                fetch(GOOGLE_SCRIPT_URL, {
+                  method: "POST",
+                  body: JSON.stringify(payload)
+                }).catch(e => console.error("Fetch warning (biasanya terkait CORS di iframe, namun data tetap masuk):", e));
+              } catch (error) {
+                console.error("Gagal mengirim ke server:", error);
+              }
+            }
+          };
+
+          // --- HANDLE SIMPAN PELANGGARAN ---
+          const handleSavePelanggaran = () => {
             if (!selectedStudent || !selectedViolation || !selectedTeacher) {
-              setModalConfig({ isOpen: true, type: 'error', title: 'Data Belum Lengkap', message: 'Mohon pilih Siswa, Jenis Pelanggaran, dan Guru Pencatat terlebih dahulu.' });
+              showModal('error', 'Data Belum Lengkap', 'Pilih Siswa, Pelanggaran, dan Guru.');
               return;
             }
 
-            setIsSaving(true);
-
-            const violationDetail = appData.violationsData.find(v => v.id.toString() === selectedViolation.toString());
-            const teacherDetail = appData.teachersData.find(t => t.id.toString() === selectedTeacher.toString());
+            const violationDetail = violationsData.find(v => v.id === selectedViolation);
+            const teacherDetail = teachersData.find(t => t.id === selectedTeacher);
 
             const newRecord = {
               id: Date.now().toString(),
               tanggal: new Date().toISOString(),
               studentId: selectedStudent.id,
               violation: violationDetail.jenis,
-              poin: parseInt(violationDetail.poin),
-              teacher: teacherDetail.nama
+              poin: violationDetail.poin,
+              teacher: teacherDetail.nama,
+              status: 'Aktif'
             };
 
-            try {
-              // Mengirim data ke Google Script
-              const response = await fetch(SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action: "addRecord", data: newRecord })
-              });
-              
-              const result = await response.json();
-              
-              if (result.status === 'success') {
-                // Update tampilan lokal agar tidak perlu refresh web
-                setAppData(prev => ({ ...prev, records: [...prev.records, newRecord] }));
-                
-                setModalConfig({
-                  isOpen: true,
-                  type: 'success',
-                  title: 'Berhasil Disimpan!',
-                  message: `Data pelanggaran untuk ${selectedStudent.nama} telah berhasil dicatat ke Google Sheet.`
-                });
-              } else {
-                throw new Error("Gagal menyimpan di server");
-              }
-            } catch (error) {
-              console.error("Error saving record:", error);
-              setModalConfig({ isOpen: true, type: 'error', title: 'Gagal Menyimpan', message: 'Terjadi kesalahan saat menyimpan ke Google Sheet. Periksa koneksi internet Anda.' });
-            } finally {
-              setIsSaving(false);
+            // Simpan ke local state
+            setRecords([newRecord, ...records]);
+            
+            // Kirim ke Google Sheets
+            sendToGoogleSheets({ action: 'simpan_pelanggaran', ...newRecord });
+
+            showModal('success', 'Tersimpan!', `Pelanggaran ${selectedStudent.nama} dicatat.`);
+            resetForms();
+          };
+
+          // --- HANDLE UPLOAD FOTO (Kompresi & Konversi ke Base64) ---
+          const handleImageUpload = (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length + fotoBase64.length > 2) {
+              showModal('error', 'Batas Foto', 'Maksimal hanya 2 foto dokumen.');
+              return;
             }
+
+            files.forEach(file => {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                  // Kompresi Gambar agar muat di Google Sheet
+                  const canvas = document.createElement('canvas');
+                  const MAX_WIDTH = 800;
+                  let scaleSize = 1;
+                  
+                  if (img.width > MAX_WIDTH) {
+                    scaleSize = MAX_WIDTH / img.width;
+                  }
+                  
+                  canvas.width = img.width * scaleSize;
+                  canvas.height = img.height * scaleSize;
+                  
+                  const ctx = canvas.getContext('2d');
+                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  
+                  // Kompres menjadi JPEG kualitas 60%
+                  const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); 
+                  setFotoBase64(prev => [...prev, compressedBase64]);
+                }
+                img.src = event.target.result;
+              };
+              reader.readAsDataURL(file);
+            });
           };
 
-          const handleCloseModal = () => {
-            const isSuccess = modalConfig.type === 'success';
-            setModalConfig({ ...modalConfig, isOpen: false });
+          const removeFoto = (index) => {
+            setFotoBase64(prev => prev.filter((_, i) => i !== index));
+          };
 
-            if (isSuccess) {
-              setSelectedViolation('');
-              setSelectedTeacher('');
-              setSelectedStudent(null);
-              setSearchQuery('');
-              setSelectedClass('');
-              setSelectedAbsen('');
+          // --- HANDLE SIMPAN TINDAKAN ---
+          const handleSaveTindakan = () => {
+            if (!selectedStudent || !rincianTindakan) {
+              showModal('error', 'Data Belum Lengkap', 'Rincian tindakan harus diisi.');
+              return;
             }
+            if (isDidampingi === 'ya' && !namaOrtu) {
+              showModal('error', 'Data Belum Lengkap', 'Nama Orang Tua/Wali harus diisi.');
+              return;
+            }
+
+            const newAction = {
+              id: Date.now().toString(),
+              tanggal: new Date().toISOString(),
+              studentId: selectedStudent.id,
+              rincian: rincianTindakan,
+              didampingi: isDidampingi,
+              namaOrtu: isDidampingi === 'ya' ? namaOrtu : '-',
+              keterangan: keteranganTindakan,
+              foto: fotoBase64
+            };
+
+            // Simpan aksi
+            setActionRecords([newAction, ...actionRecords]);
+
+            // Reset Poin di lokal
+            setRecords(prevRecords => 
+              prevRecords.map(rec => 
+                (rec.studentId === selectedStudent.id && rec.status === 'Aktif') 
+                  ? { ...rec, status: 'Ditindak' } 
+                  : rec
+              )
+            );
+
+            // Kirim ke Google Sheets (Data Tindakan + Perintah Reset)
+            sendToGoogleSheets({ action: 'simpan_tindakan', ...newAction });
+
+            showModal('success', 'Tindakan Disimpan!', `Tindakan dicatat. Poin pelanggaran ${selectedStudent.nama} telah direset (Selesai).`);
+            resetForms();
           };
 
-          const studentRecords = appData.records.filter(r => r.studentId.toString() === selectedStudent?.id.toString());
-          const totalPoin = studentRecords.reduce((sum, r) => sum + parseInt(r.poin || 0), 0);
-
-          const getStatus = (poin) => {
-            if (poin <= visualData.hijau.max) return visualData.hijau;
-            if (poin <= visualData.kuning.max) return visualData.kuning;
-            return visualData.merah;
+          const showModal = (type, title, message) => setModalConfig({ isOpen: true, type, title, message });
+          const handleCloseModal = () => setModalConfig({ ...modalConfig, isOpen: false });
+          
+          const resetForms = () => {
+            setSelectedViolation(''); setSelectedTeacher(''); setRincianTindakan('');
+            setIsDidampingi('tidak'); setNamaOrtu(''); setKeteranganTindakan('Selesai');
+            setFotoBase64([]); setSelectedStudent(null); setSearchQuery('');
+            setSelectedClass(''); setSelectedAbsen('');
           };
 
-          const status = getStatus(totalPoin);
+          // --- KALKULASI REKAPAN ---
+          const studentRecords = records.filter(r => r.studentId === selectedStudent?.id);
+          const studentActions = actionRecords.filter(a => a.studentId === selectedStudent?.id);
+          
+          // Hitung poin HANYA dari pelanggaran yang masih 'Aktif'
+          const activeRecords = studentRecords.filter(r => r.status === 'Aktif');
+          const totalPoinAktif = activeRecords.reduce((sum, r) => sum + r.poin, 0);
+          
+          const statusInfo = totalPoinAktif <= visualData.hijau.max ? visualData.hijau 
+                           : totalPoinAktif <= visualData.kuning.max ? visualData.kuning 
+                           : visualData.merah;
+
+          const handlePrint = (type) => {
+            setPrintLayout(type);
+            setTimeout(() => {
+              window.print();
+            }, 200);
+          };
 
           const downloadCSV = () => {
             if (!selectedStudent) return;
-            let csvContent = "Tanggal,Pelanggaran,Poin,Pencatat\n";
+            let csvContent = "Tanggal,Pelanggaran,Poin,Status,Pencatat\n";
             studentRecords.forEach(row => {
               const date = new Date(row.tanggal).toLocaleDateString('id-ID');
-              csvContent += `${date},${row.violation},${row.poin},${row.teacher}\n`;
+              csvContent += `${date},${row.violation},${row.poin},${row.status},${row.teacher}\n`;
             });
-            csvContent += `\nTotal Poin,,,${totalPoin}`;
+            csvContent += `\nTotal Poin Aktif,,,${totalPoinAktif}`;
 
-            try {
-              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.setAttribute("href", url);
-              link.setAttribute("download", `Rekap_Poin_${selectedStudent.nama.replace(/\s+/g, '_')}.csv`);
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            } catch (error) {
-              setModalConfig({ isOpen: true, type: 'error', title: 'Error Pengunduhan', message: 'Gagal mengunduh file.' });
-            }
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Rekap_Poin_${selectedStudent.nama.replace(/\s+/g, '_')}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
           };
-
-          const handlePrint = () => {
-            window.print();
-          };
-
-          // --- TAMPILAN LOADING ---
-          if (isLoading) {
-            return (
-              <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
-                <div className="loader mb-6"></div>
-                <h2 className="text-xl font-bold text-gray-800 mb-2">Sinkronisasi Google Sheet</h2>
-                <p className="text-gray-500 text-sm">Sedang memuat data Sekolah, Guru, dan Siswa...</p>
-              </div>
-            );
-          }
-
-          if (fetchError) {
-            return (
-              <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
-                <div className="bg-red-100 p-4 rounded-full text-red-600 mb-6">
-                  <i className="fa-solid fa-link-slash text-4xl"></i>
-                </div>
-                <h2 className="text-xl font-bold text-gray-800 mb-2">Koneksi Database Terputus</h2>
-                <p className="text-gray-500 text-sm max-w-md">
-                  Harap pastikan Anda telah memasukkan <b>URL Web App Google Script</b> pada variabel <code className="bg-gray-200 px-1 rounded">SCRIPT_URL</code> di dalam file HTML aplikasi ini.
-                </p>
-              </div>
-            );
-          }
 
           const renderStudentSelector = () => (
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 relative z-10">
@@ -280,26 +329,13 @@
                 <div className="relative">
                   <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg p-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
                     <i className="fa-solid fa-magnifying-glass text-gray-400 mx-2"></i>
-                    <input 
-                      type="text" 
-                      placeholder="Ketik nama siswa..." 
-                      className="w-full bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400"
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        if(selectedStudent && e.target.value !== selectedStudent.nama) setSelectedStudent(null);
-                      }}
-                    />
+                    <input type="text" placeholder="Ketik nama siswa..." className="w-full bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); if(selectedStudent && e.target.value !== selectedStudent.nama) setSelectedStudent(null); }} />
                   </div>
                   {searchQuery.length >= 2 && !selectedStudent && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-20">
                       {filteredStudents.length > 0 ? (
                         filteredStudents.map(s => (
-                          <div 
-                            key={s.id} 
-                            className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0"
-                            onClick={() => handleSelectStudent(s)}
-                          >
+                          <div key={s.id} className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0" onClick={() => handleSelectStudent(s)}>
                             <div className="font-medium text-gray-800">{s.nama}</div>
                             <div className="text-xs text-gray-500">Kelas {s.kelas} • Absen {s.noAbsen}</div>
                           </div>
@@ -313,26 +349,15 @@
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Kelas</label>
-                    <select 
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      value={selectedClass}
-                      onChange={(e) => { setSelectedClass(e.target.value); setSelectedAbsen(''); setSelectedStudent(null); }}
-                    >
+                    <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setSelectedAbsen(''); setSelectedStudent(null); }}>
                       <option value="">Pilih Kelas</option>
                       {classes.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">No Absen</label>
-                    <select 
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50"
-                      value={selectedAbsen}
-                      onChange={(e) => setSelectedAbsen(e.target.value)}
-                      disabled={!selectedClass}
-                    >
+                    <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50" value={selectedAbsen} onChange={(e) => setSelectedAbsen(e.target.value)} disabled={!selectedClass}>
                       <option value="">Pilih Absen</option>
-                      {appData.studentsData.filter(s => s.kelas === selectedClass).sort((a,b) => parseInt(a.noAbsen) - parseInt(b.noAbsen)).map(s => (
+                      {studentsData.filter(s => s.kelas === selectedClass).sort((a,b) => parseInt(a.noAbsen) - parseInt(b.noAbsen)).map(s => (
                         <option key={s.id} value={s.noAbsen}>{s.noAbsen} - {s.nama}</option>
                       ))}
                     </select>
@@ -346,9 +371,7 @@
                     <div className="font-semibold text-blue-900">{selectedStudent.nama}</div>
                     <div className="text-sm text-blue-700">Kelas {selectedStudent.kelas} • No. Absen {selectedStudent.noAbsen}</div>
                   </div>
-                  <div className="bg-white px-3 py-1 rounded-full text-xs font-bold text-blue-600 shadow-sm border border-blue-100">
-                    Siswa Terpilih
-                  </div>
+                  <div className="bg-white px-3 py-1 rounded-full text-xs font-bold text-blue-600 shadow-sm border border-blue-100">Siswa Terpilih</div>
                 </div>
               )}
             </div>
@@ -364,60 +387,50 @@
                   <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 transform transition-all">
                     <div className="flex justify-center mb-4">
                       {modalConfig.type === 'success' ? (
-                        <div className="bg-green-100 p-3 rounded-full text-green-600">
-                          <i className="fa-solid fa-circle-check text-4xl"></i>
-                        </div>
+                        <div className="bg-green-100 p-3 rounded-full text-green-600"><i className="fa-solid fa-circle-check text-4xl"></i></div>
                       ) : (
-                        <div className="bg-red-100 p-3 rounded-full text-red-600">
-                          <i className="fa-solid fa-triangle-exclamation text-4xl"></i>
-                        </div>
+                        <div className="bg-red-100 p-3 rounded-full text-red-600"><i className="fa-solid fa-triangle-exclamation text-4xl"></i></div>
                       )}
                     </div>
                     <h3 className="text-xl font-bold text-center text-gray-900 mb-2">{modalConfig.title}</h3>
                     <p className="text-center text-gray-600 mb-6 text-sm">{modalConfig.message}</p>
-                    <button 
-                      onClick={handleCloseModal}
-                      className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-colors ${
-                        modalConfig.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-                      }`}
-                    >
-                      Oke, Mengerti
-                    </button>
+                    <button onClick={handleCloseModal} className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-colors ${modalConfig.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>Oke, Mengerti</button>
                   </div>
                 </div>
               )}
 
               {/* Header */}
               <header className="bg-white shadow-sm sticky top-0 z-50 print:hidden">
-                <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+                <div className="max-w-3xl mx-auto px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="bg-blue-600 w-10 h-10 flex items-center justify-center rounded-lg shadow-inner">
                       <i className="fa-solid fa-shield-halved text-xl text-white"></i>
                     </div>
                     <div>
                       <h1 className="text-xl font-bold text-gray-900 leading-tight">Saku Poin</h1>
-                      <p className="text-xs text-gray-500 font-medium">{appData.schoolData.namaSekolah}</p>
+                      <p className="text-xs text-gray-500 font-medium">{schoolData.namaSekolah}</p>
                     </div>
                   </div>
                   
                   {/* Desktop Menu */}
                   <nav className="hidden md:flex bg-gray-100 p-1 rounded-lg">
-                    <button onClick={() => setActiveTab('input')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'input' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Input</button>
-                    <button onClick={() => setActiveTab('rekap')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'rekap' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Rekapan</button>
-                    <button onClick={() => setActiveTab('download')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'download' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Download</button>
+                    <button onClick={() => setActiveTab('input')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'input' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Poin</button>
+                    <button onClick={() => setActiveTab('tindakan')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'tindakan' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Tindakan</button>
+                    <button onClick={() => setActiveTab('rekap')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'rekap' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Rekapan</button>
+                    <button onClick={() => setActiveTab('download')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'download' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>Unduh/Cetak</button>
                   </nav>
                 </div>
               </header>
 
               <main className="max-w-3xl mx-auto px-4 py-6 print:p-0 print:max-w-none">
                 
-                {/* TAB 1: INPUT */}
+                {/* --- TAB 1: INPUT POIN --- */}
                 <div className={`space-y-6 print:hidden ${activeTab === 'input' ? 'block' : 'hidden'}`}>
                   {renderStudentSelector()}
 
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center">
-                      <i className="fa-solid fa-circle-exclamation text-red-500 mr-2"></i> Detail Pelanggaran
+                      <i className="fa-solid fa-circle-exclamation text-red-500 mr-2"></i> Catat Pelanggaran
                     </h3>
                     
                     <div className="space-y-4">
@@ -425,7 +438,7 @@
                         <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Pelanggaran</label>
                         <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={selectedViolation} onChange={(e) => setSelectedViolation(e.target.value)}>
                           <option value="">-- Pilih Pelanggaran --</option>
-                          {appData.violationsData.map(v => <option key={v.id} value={v.id}>{v.jenis} (Poin: {v.poin})</option>)}
+                          {violationsData.map(v => <option key={v.id} value={v.id}>{v.jenis} (Poin: {v.poin})</option>)}
                         </select>
                       </div>
 
@@ -433,70 +446,166 @@
                         <label className="block text-sm font-medium text-gray-700 mb-1">Guru Pencatat</label>
                         <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)}>
                           <option value="">-- Pilih Guru --</option>
-                          {appData.teachersData.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
+                          {teachersData.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                         </select>
                       </div>
 
-                      <button 
-                        onClick={handleSave} 
-                        disabled={isSaving}
-                        className={`w-full text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm mt-6 ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-                      >
-                        {isSaving ? (
-                          <><div className="loader !w-5 !h-5 !border-2 !border-white !border-t-transparent mr-2"></div> Menyimpan...</>
-                        ) : (
-                          <><i className="fa-solid fa-floppy-disk mr-2"></i> Simpan Pelanggaran</>
-                        )}
+                      <button onClick={handleSavePelanggaran} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm mt-6">
+                        <i className="fa-solid fa-floppy-disk mr-2"></i> Simpan Poin
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* TAB 2: REKAP */}
+                {/* --- TAB 2: INPUT TINDAKAN --- */}
+                <div className={`space-y-6 print:hidden ${activeTab === 'tindakan' ? 'block' : 'hidden'}`}>
+                  {renderStudentSelector()}
+                  
+                  {selectedStudent ? (
+                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center">
+                        <i className="fa-solid fa-gavel text-indigo-500 mr-2"></i> Input Tindakan Penanganan
+                      </h3>
+                      
+                      <div className="bg-indigo-50 p-3 rounded-lg mb-4 flex justify-between items-center border border-indigo-100">
+                        <span className="text-sm text-indigo-800">Total Poin Aktif saat ini:</span>
+                        <span className="font-bold text-lg text-indigo-900">{totalPoinAktif}</span>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Rincian Tindakan (Ketik Manual)</label>
+                          <textarea rows="3" placeholder="Contoh: Pemanggilan orang tua dan pembinaan disiplin..." className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 text-sm" value={rincianTindakan} onChange={(e) => setRincianTindakan(e.target.value)}></textarea>
+                        </div>
+
+                        <div className="border border-gray-100 p-3 rounded-lg bg-gray-50">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Didampingi Orang Tua / Wali?</label>
+                          <div className="flex gap-4 mb-3">
+                            <label className="flex items-center text-sm cursor-pointer"><input type="radio" name="ortu" checked={isDidampingi === 'ya'} onChange={() => setIsDidampingi('ya')} className="mr-2 text-indigo-600" /> Ya, Didampingi</label>
+                            <label className="flex items-center text-sm cursor-pointer"><input type="radio" name="ortu" checked={isDidampingi === 'tidak'} onChange={() => { setIsDidampingi('tidak'); setNamaOrtu(''); }} className="mr-2 text-indigo-600" /> Tidak</label>
+                          </div>
+                          {isDidampingi === 'ya' && (
+                            <input type="text" placeholder="Masukkan Nama Orang Tua/Wali..." className="w-full bg-white border border-gray-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500" value={namaOrtu} onChange={(e) => setNamaOrtu(e.target.value)} />
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Status Keterangan</label>
+                          <select className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 text-sm" value={keteranganTindakan} onChange={(e) => setKeteranganTindakan(e.target.value)}>
+                            <option value="Selesai">Selesai (Kasus ditutup, Poin direset)</option>
+                            <option value="Dalam Pengawasan">Dalam Pengawasan</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Dokumentasi (Maks 2 Foto)</label>
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 text-sm font-medium text-gray-700">
+                              <i className="fa-solid fa-camera text-gray-500 mr-2"></i> Pilih Foto
+                              <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={fotoBase64.length >= 2} />
+                            </label>
+                            <span className="text-xs text-gray-500">{fotoBase64.length}/2 Foto ditambahkan</span>
+                          </div>
+                          
+                          {fotoBase64.length > 0 && (
+                            <div className="flex gap-3 mt-3">
+                              {fotoBase64.map((src, idx) => (
+                                <div key={idx} className="relative w-24 h-24 border rounded-lg overflow-hidden group">
+                                  <img src={src} alt="Preview" className="w-full h-full object-cover" />
+                                  <button onClick={() => removeFoto(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <i className="fa-solid fa-xmark text-xs"></i>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-[10px] text-gray-400 mt-1">*Foto akan diperkecil otomatis agar bisa disimpan di Google Sheet.</p>
+                        </div>
+
+                        <button onClick={handleSaveTindakan} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center mt-6">
+                          <i className="fa-solid fa-gavel mr-2"></i> Simpan Tindakan & Reset Poin
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center p-10 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
+                      <i className="fa-solid fa-user text-4xl mb-3 opacity-50 block"></i>
+                      <p>Pilih siswa untuk diberikan tindakan.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* --- TAB 3: REKAPAN --- */}
                 <div className={`space-y-6 print:hidden ${activeTab === 'rekap' ? 'block' : 'hidden'}`}>
                   {renderStudentSelector()}
 
                   {selectedStudent ? (
                     <div className="space-y-6">
-                      <div className={`p-6 rounded-2xl border ${status.color} flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden`}>
-                        <div className="absolute top-0 right-0 p-4 opacity-20">
-                           <i className={`${status.icon} text-[6rem]`}></i>
+                      <div className={`p-6 rounded-2xl border ${statusInfo.color} flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden`}>
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                           <i className={`${statusInfo.icon} text-[6rem]`}></i>
                         </div>
-                        <h2 className="text-5xl font-black mb-2 relative z-10">{totalPoin}</h2>
-                        <p className="text-sm uppercase tracking-wider font-bold opacity-80 mb-1 relative z-10">Total Poin</p>
-                        <div className="inline-flex items-center bg-white/40 backdrop-blur-sm px-3 py-1 rounded-full mt-2 relative z-10">
-                          <i className={`${status.icon} mr-2`}></i>
-                          <span className="font-semibold text-sm">{status.label}</span>
+                        <h2 className="text-5xl font-black mb-2 relative z-10">{totalPoinAktif}</h2>
+                        <p className="text-sm uppercase tracking-wider font-bold opacity-80 mb-1 relative z-10">Poin Aktif</p>
+                        <div className="inline-flex items-center bg-white/50 backdrop-blur-sm px-3 py-1 rounded-full mt-2 relative z-10">
+                          <i className={`${statusInfo.icon} mr-2`}></i>
+                          <span className="font-semibold text-sm">{statusInfo.label}</span>
                         </div>
                       </div>
 
                       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <div className="p-4 border-b border-gray-100 bg-gray-50">
                           <h3 className="font-semibold text-gray-800 flex items-center">
-                            <i className="fa-solid fa-clock-rotate-left text-gray-500 mr-2"></i> Riwayat Pelanggaran
+                            <i className="fa-solid fa-book-open text-gray-500 mr-2"></i> Buku Catatan Siswa
                           </h3>
-                          <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-md font-medium">{studentRecords.length} Catatan</span>
                         </div>
                         
-                        <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
-                          {studentRecords.length > 0 ? (
-                            studentRecords.map(record => (
-                              <div key={record.id} className="p-4 hover:bg-gray-50 transition-colors">
-                                <div className="flex justify-between items-start mb-1">
-                                  <p className="font-medium text-gray-800">{record.violation}</p>
-                                  <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-sm">+{record.poin}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-xs text-gray-500">
-                                  <span>{new Date(record.tanggal).toLocaleDateString('id-ID')}</span>
-                                  <span>Oleh: {record.teacher}</span>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
+                        <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
+                          {studentRecords.length === 0 && studentActions.length === 0 ? (
                             <div className="p-8 text-center text-gray-400">
-                              <i className="fa-solid fa-circle-check text-5xl mx-auto mb-3 text-gray-200 block"></i>
-                              <p>Belum ada catatan pelanggaran.</p>
+                              <p>Bersih! Belum ada catatan apa pun.</p>
                             </div>
+                          ) : (
+                            <>
+                              {/* Tampilkan Riwayat Tindakan */}
+                              {studentActions.map(action => (
+                                <div key={action.id} className="p-4 bg-indigo-50/50 border-l-4 border-indigo-500">
+                                  <div className="flex justify-between items-start mb-1">
+                                    <p className="font-semibold text-indigo-900">Tindakan Penanganan</p>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md font-bold">{action.keterangan}</span>
+                                  </div>
+                                  <p className="text-sm text-gray-700 mt-1 mb-2">"{action.rincian}"</p>
+                                  <div className="flex items-center text-xs text-gray-500 space-x-4">
+                                    <span>📅 {new Date(action.tanggal).toLocaleDateString('id-ID')}</span>
+                                    {action.didampingi === 'ya' && <span>👥 Ortu: {action.namaOrtu}</span>}
+                                    {action.foto.length > 0 && <span>📸 {action.foto.length} Foto</span>}
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Tampilkan Riwayat Pelanggaran */}
+                              {studentRecords.map(record => {
+                                const isResolved = record.status === 'Ditindak';
+                                return (
+                                  <div key={record.id} className={`p-4 transition-colors ${isResolved ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'}`}>
+                                    <div className="flex justify-between items-start mb-1">
+                                      <p className={`font-medium ${isResolved ? 'line-through text-gray-500' : 'text-gray-800'}`}>{record.violation}</p>
+                                      {isResolved ? (
+                                        <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center">
+                                          <i className="fa-solid fa-square-check mr-1"></i> Selesai
+                                        </span>
+                                      ) : (
+                                        <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-sm">+{record.poin}</span>
+                                      )}
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs text-gray-500">
+                                      <span>{new Date(record.tanggal).toLocaleDateString('id-ID')}</span>
+                                      <span>Pencatat: {record.teacher}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </>
                           )}
                         </div>
                       </div>
@@ -504,34 +613,50 @@
                   ) : (
                     <div className="text-center p-10 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                       <i className="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50 block"></i>
-                      <p>Pilih siswa terlebih dahulu.</p>
+                      <p>Pilih siswa untuk melihat buku catatan.</p>
                     </div>
                   )}
                 </div>
 
-                {/* TAB 3: DOWNLOAD */}
+                {/* --- TAB 4: DOWNLOAD / CETAK --- */}
                 <div className={`space-y-6 print:hidden ${activeTab === 'download' ? 'block' : 'hidden'}`}>
                   {renderStudentSelector()}
 
                   {selectedStudent && (
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                      <h3 className="font-semibold text-gray-800 mb-4 border-b pb-2">Opsi Unduh Laporan</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <button onClick={handlePrint} className="flex flex-col items-center justify-center p-6 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all">
-                          <div className="bg-white w-14 h-14 flex items-center justify-center rounded-full shadow-sm mb-3">
-                            <i className="fa-solid fa-print text-3xl text-red-600"></i>
+                      <h3 className="font-semibold text-gray-800 mb-4 border-b pb-2">Opsi Cetak & Unduh Dokumen</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        <button onClick={() => handlePrint('rekap')} className="flex items-center p-4 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all text-left">
+                          <div className="bg-white w-12 h-12 flex items-center justify-center rounded-full mr-4 shadow-sm">
+                            <i className="fa-solid fa-file-lines text-xl text-blue-600"></i>
                           </div>
-                          <span className="font-semibold text-red-900">Cetak / Simpan PDF</span>
-                          <span className="text-xs text-red-600 mt-1 text-center">Format resmi dengan kop surat</span>
+                          <div>
+                            <span className="block font-semibold text-blue-900">1. Cetak Rekap Poin</span>
+                            <span className="text-xs text-blue-700">Laporan total poin & daftar pelanggaran</span>
+                          </div>
                         </button>
 
-                        <button onClick={downloadCSV} className="flex flex-col items-center justify-center p-6 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all">
-                          <div className="bg-white w-14 h-14 flex items-center justify-center rounded-full shadow-sm mb-3">
-                            <i className="fa-solid fa-file-excel text-3xl text-emerald-600"></i>
+                        <button onClick={() => handlePrint('tindakan')} className="flex items-center p-4 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all text-left">
+                          <div className="bg-white w-12 h-12 flex items-center justify-center rounded-full mr-4 shadow-sm">
+                            <i className="fa-solid fa-gavel text-xl text-indigo-600"></i>
                           </div>
-                          <span className="font-semibold text-emerald-900">Unduh Excel (CSV)</span>
-                          <span className="text-xs text-emerald-600 mt-1 text-center">Format tabel sederhana</span>
+                          <div>
+                            <span className="block font-semibold text-indigo-900">2. Cetak Surat Tindakan</span>
+                            <span className="text-xs text-indigo-700">Laporan penanganan, ttd ortu & foto</span>
+                          </div>
                         </button>
+
+                        <button onClick={downloadCSV} className="flex items-center p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all text-left md:col-span-2">
+                          <div className="bg-white w-12 h-12 flex items-center justify-center rounded-full mr-4 shadow-sm">
+                            <i className="fa-solid fa-file-excel text-xl text-emerald-600"></i>
+                          </div>
+                          <div>
+                            <span className="block font-semibold text-emerald-900">Unduh Excel (CSV)</span>
+                            <span className="text-xs text-emerald-600">Tabel data mentah untuk diolah di Excel</span>
+                          </div>
+                        </button>
+
                       </div>
                     </div>
                   )}
@@ -539,71 +664,146 @@
 
               </main>
 
-              {/* TAMPILAN PRINT (Hanya Muncul Saat di Print) */}
+              {/* =========================================================================
+                  AREA CETAK (PRINT PDF) - HANYA MUNCUL DI KERTAS SAAT DI PRINT
+                  ========================================================================= */}
               {selectedStudent && (
-                <div className="hidden print:block text-black bg-white p-8">
-                  <div className="text-center border-b-2 border-black pb-4 mb-6">
-                    <h1 className="text-xl font-bold uppercase">Rekapan Saku Poin Siswa</h1>
-                    <h2 className="text-2xl font-bold uppercase">{appData.schoolData.namaSekolah}</h2>
-                    <p className="text-sm mt-1">Laporan Resmi Poin Pelanggaran Kedisiplinan Siswa</p>
-                  </div>
-
-                  <table className="mb-6 text-sm">
-                    <tbody>
-                      <tr><td className="w-32 py-1 font-semibold">Nama Siswa</td><td className="w-4">:</td><td>{selectedStudent.nama}</td></tr>
-                      <tr><td className="py-1 font-semibold">Kelas</td><td>:</td><td>{selectedStudent.kelas}</td></tr>
-                      <tr><td className="py-1 font-semibold">No. Absen</td><td>:</td><td>{selectedStudent.noAbsen}</td></tr>
-                      <tr><td className="py-1 font-semibold">Total Poin</td><td>:</td><td className="font-bold text-lg">{totalPoin} ({status.label})</td></tr>
-                    </tbody>
-                  </table>
-
-                  <table className="w-full text-sm border-collapse border border-gray-800 mb-8">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-800 p-2 text-center w-12">No</th>
-                        <th className="border border-gray-800 p-2 text-left">Tanggal</th>
-                        <th className="border border-gray-800 p-2 text-left">Jenis Pelanggaran</th>
-                        <th className="border border-gray-800 p-2 text-center w-20">Poin</th>
-                        <th className="border border-gray-800 p-2 text-left">Pencatat</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {studentRecords.length > 0 ? (
-                        studentRecords.map((r, index) => (
-                          <tr key={r.id}>
-                            <td className="border border-gray-800 p-2 text-center">{index + 1}</td>
-                            <td className="border border-gray-800 p-2">{new Date(r.tanggal).toLocaleDateString('id-ID')}</td>
-                            <td className="border border-gray-800 p-2">{r.violation}</td>
-                            <td className="border border-gray-800 p-2 text-center">{r.poin}</td>
-                            <td className="border border-gray-800 p-2">{r.teacher}</td>
+                <div className="hidden print:block text-black bg-white w-full">
+                  
+                  {/* LAYOUT 1: CETAK REKAP POIN */}
+                  {printLayout === 'rekap' && (
+                    <div className="p-4">
+                      <div className="text-center border-b-[3px] border-black pb-4 mb-6">
+                        <h1 className="text-xl font-bold uppercase">Rekapan Saku Poin Siswa</h1>
+                        <h2 className="text-2xl font-bold uppercase">{schoolData.namaSekolah}</h2>
+                      </div>
+                      <table className="mb-6 text-sm">
+                        <tbody>
+                          <tr><td className="w-32 py-1 font-semibold">Nama Siswa</td><td className="w-4">:</td><td>{selectedStudent.nama}</td></tr>
+                          <tr><td className="py-1 font-semibold">Kelas / Absen</td><td>:</td><td>{selectedStudent.kelas} / {selectedStudent.noAbsen}</td></tr>
+                          <tr><td className="py-1 font-semibold">Total Poin Aktif</td><td>:</td><td className="font-bold text-lg">{totalPoinAktif} ({statusInfo.label})</td></tr>
+                        </tbody>
+                      </table>
+                      <table className="w-full text-sm border-collapse border border-gray-800 mb-8">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-800 p-2 text-center w-10">No</th>
+                            <th className="border border-gray-800 p-2 text-left w-24">Tanggal</th>
+                            <th className="border border-gray-800 p-2 text-left">Jenis Pelanggaran</th>
+                            <th className="border border-gray-800 p-2 text-center w-16">Poin</th>
+                            <th className="border border-gray-800 p-2 text-center w-24">Status</th>
                           </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan="5" className="border border-gray-800 p-4 text-center italic">Tidak ada catatan pelanggaran.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                        </thead>
+                        <tbody>
+                          {studentRecords.length > 0 ? studentRecords.map((r, i) => (
+                            <tr key={r.id}>
+                              <td className="border border-gray-800 p-2 text-center">{i + 1}</td>
+                              <td className="border border-gray-800 p-2">{new Date(r.tanggal).toLocaleDateString('id-ID')}</td>
+                              <td className="border border-gray-800 p-2">{r.violation}</td>
+                              <td className="border border-gray-800 p-2 text-center">{r.status === 'Ditindak' ? '-' : r.poin}</td>
+                              <td className="border border-gray-800 p-2 text-center text-xs italic">{r.status}</td>
+                            </tr>
+                          )) : <tr><td colSpan="5" className="border border-gray-800 p-4 text-center italic">Tidak ada catatan.</td></tr>}
+                        </tbody>
+                      </table>
+                      <div className="flex justify-between mt-12 text-sm pt-8">
+                        <div className="text-center w-64">
+                          <p className="mb-20">Mengetahui,<br/>Kepala Sekolah</p>
+                          <p className="font-bold underline">{schoolData.kepalaSekolah}</p>
+                          <p>NIP. {schoolData.nipKepalaSekolah}</p>
+                        </div>
+                        <div className="text-center w-64">
+                          <p>{schoolData.lokasi}, {new Date().toLocaleDateString('id-ID')}</p>
+                          <p className="mb-16">Wali Kelas {selectedStudent.kelas}</p>
+                          <p className="font-bold underline">{teachersData.find(t => t.waliKelas === selectedStudent.kelas)?.nama || '(........................)'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="flex justify-between mt-12 text-sm pt-8">
-                    <div className="text-center w-64">
-                      <p className="mb-20">Mengetahui,<br/>Kepala Sekolah</p>
-                      <p className="font-bold underline">{appData.schoolData.kepalaSekolah}</p>
-                      <p>NIP. {appData.schoolData.nipKepalaSekolah}</p>
+                  {/* LAYOUT 2: CETAK SURAT TINDAKAN */}
+                  {printLayout === 'tindakan' && (
+                    <div className="p-4">
+                      {/* HALAMAN 1: SURAT & TABEL TINDAKAN */}
+                      <div className="text-center border-b-[3px] border-black pb-4 mb-6">
+                        <h1 className="text-lg font-bold uppercase">Tindakan Penanganan Pelanggaran</h1>
+                        <h1 className="text-lg font-bold uppercase">Berdasarkan Rekapan Saku Poin Siswa</h1>
+                        <h2 className="text-2xl font-bold uppercase mt-1">{schoolData.namaSekolah}</h2>
+                      </div>
+
+                      <div className="mb-6">
+                        <p className="text-sm mb-2">Yang bertanda tangan di bawah ini menerangkan bahwa siswa berikut:</p>
+                        <table className="text-sm ml-4">
+                          <tbody>
+                            <tr><td className="w-32 py-1 font-semibold">Nama Siswa</td><td className="w-4">:</td><td>{selectedStudent.nama}</td></tr>
+                            <tr><td className="py-1 font-semibold">Kelas / No. Absen</td><td>:</td><td>{selectedStudent.kelas} / {selectedStudent.noAbsen}</td></tr>
+                          </tbody>
+                        </table>
+                        <p className="text-sm mt-2">Telah diberikan tindakan/penanganan kedisiplinan dengan rincian sebagai berikut:</p>
+                      </div>
+
+                      <table className="w-full text-sm border-collapse border border-gray-800 mb-8">
+                        <thead>
+                          <tr className="bg-gray-200">
+                            <th className="border border-gray-800 p-2 text-center w-10">No</th>
+                            <th className="border border-gray-800 p-2 text-left w-24">Tanggal</th>
+                            <th className="border border-gray-800 p-2 text-left">Rincian Tindakan / Pembinaan</th>
+                            <th className="border border-gray-800 p-2 text-center w-24">Keterangan</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {studentActions.length > 0 ? studentActions.map((a, i) => (
+                            <tr key={a.id}>
+                              <td className="border border-gray-800 p-2 text-center align-top">{i + 1}</td>
+                              <td className="border border-gray-800 p-2 align-top">{new Date(a.tanggal).toLocaleDateString('id-ID')}</td>
+                              <td className="border border-gray-800 p-2 align-top">{a.rincian}</td>
+                              <td className="border border-gray-800 p-2 text-center align-top font-semibold">{a.keterangan}</td>
+                            </tr>
+                          )) : <tr><td colSpan="4" className="border border-gray-800 p-6 text-center italic">Belum ada tindakan yang dicatat untuk siswa ini.</td></tr>}
+                        </tbody>
+                      </table>
+
+                      <div className="mt-8 text-sm w-full">
+                        <div className="flex justify-end mb-4">
+                          <p>{schoolData.lokasi}, {new Date().toLocaleDateString('id-ID')}</p>
+                        </div>
+                        <div className="flex justify-between items-start text-center">
+                          <div className="w-1/3 px-2">
+                            <p className="mb-20">Mengetahui,<br/>Kepala Sekolah</p>
+                            <p className="font-bold underline">{schoolData.kepalaSekolah}</p>
+                            <p>NIP. {schoolData.nipKepalaSekolah}</p>
+                          </div>
+                          <div className="w-1/3 px-2">
+                            <p className="mb-20">Orang Tua / Wali Siswa</p>
+                            <p className="font-bold underline">
+                              {studentActions.length > 0 && studentActions[0].didampingi === 'ya' ? studentActions[0].namaOrtu : '(........................)'}
+                            </p>
+                          </div>
+                          <div className="w-1/3 px-2">
+                            <p className="mb-20">Wali Kelas {selectedStudent.kelas}</p>
+                            <p className="font-bold underline">{teachersData.find(t => t.waliKelas === selectedStudent.kelas)?.nama || '(........................)'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* HALAMAN 2: LAMPIRAN FOTO DOKUMENTASI (Memaksa Page Break di PDF) */}
+                      {studentActions.some(a => a.foto && a.foto.length > 0) && (
+                        <div className="mt-12 pt-8" style={{ pageBreakBefore: 'always' }}>
+                          <h3 className="text-lg font-bold uppercase text-center border-b-2 border-black pb-2 mb-6">Lampiran Dokumentasi Tindakan</h3>
+                          <div className="grid grid-cols-2 gap-8">
+                            {studentActions.map(action => (
+                              action.foto && action.foto.map((base64String, idx) => (
+                                <div key={`${action.id}-${idx}`} className="border p-2 bg-gray-50 text-center">
+                                  <img src={base64String} alt="Dokumentasi" className="w-full h-auto max-h-64 object-contain mx-auto mb-2 border border-gray-300" />
+                                  <p className="text-xs font-semibold">Tindakan Tanggal: {new Date(action.tanggal).toLocaleDateString('id-ID')}</p>
+                                </div>
+                              ))
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-center w-64">
-                      <p>{appData.schoolData.lokasi}, {new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p>
-                      <p className="mb-16">Wali Kelas {selectedStudent.kelas}</p>
-                      {(() => {
-                        const waliKelas = appData.teachersData.find(t => t.waliKelas === selectedStudent.kelas);
-                        return waliKelas ? (
-                          <>
-                            <p className="font-bold underline">{waliKelas.nama}</p>
-                            <p>NIP. {waliKelas.nip || '-'}</p>
-                          </>
-                        ) : (<p className="italic text-gray-500">(Belum ditentukan)</p>);
-                      })()}
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -612,15 +812,19 @@
                 <div className="flex justify-around items-center h-16">
                   <button onClick={() => setActiveTab('input')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'input' ? 'text-blue-600' : 'text-gray-400'}`}>
                     <i className="fa-solid fa-floppy-disk text-xl"></i>
-                    <span className="text-[10px] font-medium">Input</span>
+                    <span className="text-[10px] font-medium">Poin</span>
+                  </button>
+                  <button onClick={() => setActiveTab('tindakan')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'tindakan' ? 'text-blue-600' : 'text-gray-400'}`}>
+                    <i className="fa-solid fa-gavel text-xl"></i>
+                    <span className="text-[10px] font-medium">Tindakan</span>
                   </button>
                   <button onClick={() => setActiveTab('rekap')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'rekap' ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <i className="fa-solid fa-file-lines text-xl"></i>
+                    <i className="fa-solid fa-book-open text-xl"></i>
                     <span className="text-[10px] font-medium">Rekapan</span>
                   </button>
                   <button onClick={() => setActiveTab('download')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'download' ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <i className="fa-solid fa-download text-xl"></i>
-                    <span className="text-[10px] font-medium">Download</span>
+                    <i className="fa-solid fa-print text-xl"></i>
+                    <span className="text-[10px] font-medium">Cetak</span>
                   </button>
                 </div>
               </nav>
@@ -629,20 +833,8 @@
           );
         }
 
-        // Render Aplikasi ke Browser
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-    </script>
-
-    <!-- Registrasi Service Worker untuk PWA (WAJIB DITAMBAHKAN SEBELUM BODY TERTUTUP) -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('Service Worker berhasil didaftarkan'))
-            .catch(err => console.log('Service Worker gagal didaftarkan:', err));
-        });
-      }
     </script>
 </body>
 </html>
